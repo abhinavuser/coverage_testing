@@ -20,8 +20,8 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
     
-    # Enable CORS
-    CORS(app, origins=['http://localhost:3000', 'http://localhost:8080'])
+    # Enable CORS for all origins (for testing)
+    CORS(app, origins="*")
     
     # Initialize extensions
     db.init_app(app)
