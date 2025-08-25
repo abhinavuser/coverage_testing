@@ -143,6 +143,33 @@ def main():
     response = requests.get(f"{BASE_URL}/projects/{project_id}/user-journeys")
     print_response(response, "Get User Journeys")
     
+    # Test 12: New Global Coverage Endpoints
+    print_header("TEST 8: GLOBAL COVERAGE ANALYSIS")
+    
+    # Test overall coverage
+    response = requests.get(f"{BASE_URL}/coverage/overall")
+    print_response(response, "Get Overall Coverage Across All Projects")
+    
+    # Test risk areas
+    response = requests.get(f"{BASE_URL}/coverage/risk-areas")
+    print_response(response, "Get High-Risk Uncovered Areas")
+    
+    # Test with project filter
+    response = requests.get(f"{BASE_URL}/coverage/risk-areas?project_id={project_id}")
+    print_response(response, "Get Risk Areas for Specific Project")
+    
+    # Test clusters
+    response = requests.get(f"{BASE_URL}/coverage/clusters")
+    print_response(response, "Get ML-Based Feature Clusters")
+    
+    # Test coverage recommendations
+    response = requests.get(f"{BASE_URL}/coverage/recommendations?limit=5")
+    print_response(response, "Get Top 5 Testing Recommendations")
+    
+    # Test with project filter
+    response = requests.get(f"{BASE_URL}/coverage/recommendations?project_id={project_id}&limit=3")
+    print_response(response, "Get Project-Specific Recommendations")
+
     # Final Summary
     print_header("🎉 TEST SUMMARY")
     print("✅ All API endpoints tested successfully!")
@@ -154,10 +181,21 @@ def main():
     print("   • Project & Feature Management")
     print("   • User Journey Tracking")
     print("   • Executive Dashboard Data")
+    print("   • Global Coverage Analysis")
+    print("   • Risk Area Prediction")
+    print("   • ML-Based Feature Clustering")
+    print("   • Intelligent Test Recommendations")
     print("\n🚀 Your Coverage Framework Backend is FULLY FUNCTIONAL!")
     
     print(f"\n📊 Access your API at: {BASE_URL}")
     print("📖 See README_BACKEND.md for complete documentation")
+    
+    # Show the new endpoints
+    print("\n🆕 NEW ENDPOINTS AVAILABLE:")
+    print(f"   • GET {BASE_URL}/coverage/overall")
+    print(f"   • GET {BASE_URL}/coverage/risk-areas")
+    print(f"   • GET {BASE_URL}/coverage/clusters") 
+    print(f"   • GET {BASE_URL}/coverage/recommendations")
 
 if __name__ == "__main__":
     try:
