@@ -23,8 +23,8 @@ The repository is organized for both extensibility and clarity, with detailed wo
 ## Repository Structure
 
 > Note: This summary covers the most significant files/folders; to see the full list, visit the [GitHub contents page](https://github.com/abhinavuser/coverage_testing/tree/master).
->
-> ```mermaid
+
+```mermaid
 flowchart TD
     A[User Input/API Request] --> B{Input Handler}
     B -->|Manual| C[Input Parsing & Preprocessing]
@@ -40,7 +40,6 @@ flowchart TD
     I --> J[Output Formatter]
     J --> K[API/CLI Response or Report Files]
 ```
-
 ### Root-level Files
 
 - `.gitignore`  
