@@ -20,8 +20,15 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
     
-    # Enable CORS for all origins (for testing)
-    CORS(app, origins="*")
+    # Enable CORS for frontend and testing
+    CORS(app, origins=[
+        "http://localhost:3000",    # Next.js development
+        "http://127.0.0.1:3000",   # Alternative localhost
+        "http://localhost:3001",    # Alternative port
+        "*"                         # Allow all for testing (remove in production)
+    ], 
+    allow_headers=["Content-Type", "Authorization", "Accept"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
     
     # Initialize extensions
     db.init_app(app)
