@@ -1,5 +1,13 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
+from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
+import os
+import zipfile
+import tempfile
+import shutil
+import requests
+import subprocess
+from pathlib import Path
 from . import db
 from .models import (
     Project, Feature, TestCase, UserJourney, Environment, 
@@ -889,6 +897,482 @@ def get_comprehensive_ml_analysis():
                     }
                 }
             }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# =============================================================================
+# PROJECT UPLOAD ENDPOINTS - FILE & GITHUB REPOSITORY UPLOAD
+# =============================================================================
+
+# Configuration for file uploads
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'zip', 'tar', 'gz', 'rar'}
+MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB
+
+# Ensure upload directory exists
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+def allowed_file(filename):
+    """Check if file extension is allowed"""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def analyze_project_files(project_path, project_name):
+    """
+    Analyze uploaded project files for vulnerabilities and security issues
+    """
+    analysis_result = {
+        'project_name': project_name,
+        'total_files': 0,
+        'code_files': 0,
+        'vulnerabilities': [],
+        'security_issues': [],
+        'languages_detected': [],
+        'risk_score': 0,
+        'recommendations': []
+    }
+    
+    try:
+        # Count files and detect languages
+        code_extensions = {
+            '.py': 'Python',
+            '.js': 'JavaScript', 
+            '.ts': 'TypeScript',
+            '.java': 'Java',
+            '.php': 'PHP',
+            '.cs': 'C#',
+            '.cpp': 'C++',
+            '.c': 'C',
+            '.rb': 'Ruby',
+            '.go': 'Go',
+            '.rs': 'Rust',
+            '.html': 'HTML',
+            '.css': 'CSS',
+            '.sql': 'SQL',
+            '.json': 'JSON',
+            '.xml': 'XML',
+            '.yaml': 'YAML',
+            '.yml': 'YAML'
+        }
+        
+        languages = set()
+        total_files = 0
+        code_files = 0
+        
+        for root, dirs, files in os.walk(project_path):
+            # Skip common non-essential directories
+            dirs[:] = [d for d in dirs if d not in ['.git', '__pycache__', 'node_modules', '.vscode', '.idea']]
+            
+            for file in files:
+                total_files += 1
+                file_path = os.path.join(root, file)
+                file_ext = os.path.splitext(file)[1].lower()
+                
+                if file_ext in code_extensions:
+                    code_files += 1
+                    languages.add(code_extensions[file_ext])
+                    
+                    # Basic vulnerability patterns
+                    try:
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            
+                            # Check for common security issues
+                            vulnerabilities = check_vulnerabilities(content, file, file_ext)
+                            analysis_result['vulnerabilities'].extend(vulnerabilities)
+                            
+                    except Exception as e:
+                        continue
+        
+        analysis_result['total_files'] = total_files
+        analysis_result['code_files'] = code_files
+        analysis_result['languages_detected'] = list(languages)
+        
+        # Calculate risk score based on vulnerabilities
+        risk_score = min(100, len(analysis_result['vulnerabilities']) * 10)
+        analysis_result['risk_score'] = risk_score
+        
+        # Generate recommendations
+        analysis_result['recommendations'] = generate_security_recommendations(
+            analysis_result['vulnerabilities'], 
+            languages
+        )
+        
+    except Exception as e:
+        analysis_result['error'] = str(e)
+    
+    return analysis_result
+
+def check_vulnerabilities(content, filename, file_ext):
+    """
+    Check for common vulnerability patterns in code
+    """
+    vulnerabilities = []
+    
+    # Common vulnerability patterns
+    patterns = {
+        'SQL Injection': [
+            r'SELECT.*\+.*',
+            r'INSERT.*\+.*',
+            r'UPDATE.*\+.*',
+            r'DELETE.*\+.*',
+            r'exec\s*\(',
+            r'execute\s*\('
+        ],
+        'XSS': [
+            r'innerHTML\s*=',
+            r'document\.write\s*\(',
+            r'eval\s*\(',
+            r'\$\(.*\)\.html\s*\(',
+        ],
+        'Hardcoded Secrets': [
+            r'password\s*=\s*["\'][^"\']{3,}["\']',
+            r'api_key\s*=\s*["\'][^"\']{10,}["\']',
+            r'secret\s*=\s*["\'][^"\']{5,}["\']',
+            r'token\s*=\s*["\'][^"\']{10,}["\']',
+        ],
+        'Insecure Functions': [
+            r'md5\s*\(',
+            r'sha1\s*\(',
+            r'pickle\.loads\s*\(',
+            r'eval\s*\(',
+            r'exec\s*\(',
+        ],
+        'File Path Traversal': [
+            r'\.\./',
+            r'open\s*\([^)]*\.\./[^)]*\)',
+            r'readFile\s*\([^)]*\.\./[^)]*\)',
+        ]
+    }
+    
+    import re
+    
+    for vuln_type, pattern_list in patterns.items():
+        for pattern in pattern_list:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            if matches:
+                vulnerabilities.append({
+                    'type': vuln_type,
+                    'file': filename,
+                    'pattern': pattern,
+                    'matches': len(matches),
+                    'severity': get_severity(vuln_type),
+                    'description': get_vulnerability_description(vuln_type)
+                })
+    
+    return vulnerabilities
+
+def get_severity(vuln_type):
+    """Get severity level for vulnerability type"""
+    severity_map = {
+        'SQL Injection': 'Critical',
+        'XSS': 'High',
+        'Hardcoded Secrets': 'High',
+        'Insecure Functions': 'Medium',
+        'File Path Traversal': 'High'
+    }
+    return severity_map.get(vuln_type, 'Medium')
+
+def get_vulnerability_description(vuln_type):
+    """Get description for vulnerability type"""
+    descriptions = {
+        'SQL Injection': 'Potential SQL injection vulnerability found. Use parameterized queries.',
+        'XSS': 'Cross-site scripting vulnerability. Sanitize user inputs and use safe DOM methods.',
+        'Hardcoded Secrets': 'Hardcoded credentials found. Use environment variables or secure vaults.',
+        'Insecure Functions': 'Use of insecure functions. Consider safer alternatives.',
+        'File Path Traversal': 'Path traversal vulnerability. Validate and sanitize file paths.'
+    }
+    return descriptions.get(vuln_type, 'Security issue detected.')
+
+def generate_security_recommendations(vulnerabilities, languages):
+    """Generate security recommendations based on findings"""
+    recommendations = []
+    
+    vuln_types = {v['type'] for v in vulnerabilities}
+    
+    if 'SQL Injection' in vuln_types:
+        recommendations.append("Implement parameterized queries and input validation")
+    
+    if 'XSS' in vuln_types:
+        recommendations.append("Use Content Security Policy (CSP) and escape user inputs")
+    
+    if 'Hardcoded Secrets' in vuln_types:
+        recommendations.append("Move secrets to environment variables or secure key management")
+    
+    if 'Python' in languages:
+        recommendations.append("Use security linters like bandit for Python code analysis")
+    
+    if 'JavaScript' in languages:
+        recommendations.append("Use ESLint security rules and consider using TypeScript")
+    
+    if len(vulnerabilities) > 10:
+        recommendations.append("Consider automated security testing in CI/CD pipeline")
+    
+    if not recommendations:
+        recommendations.append("Implement regular security code reviews and dependency scanning")
+    
+    return recommendations
+
+@api.route('/projects/upload/github', methods=['POST'])
+def upload_github_repository():
+    """
+    Upload and analyze a GitHub repository
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'repository_url' not in data:
+            return jsonify({'error': 'Repository URL is required'}), 400
+        
+        repo_url = data['repository_url']
+        branch = data.get('branch', 'main')
+        access_token = data.get('access_token')
+        
+        # Validate GitHub URL
+        if 'github.com' not in repo_url:
+            return jsonify({'error': 'Invalid GitHub repository URL'}), 400
+        
+        # Extract repo name for project creation
+        repo_name = repo_url.split('/')[-1].replace('.git', '')
+        
+        # Create temporary directory for cloning
+        temp_dir = tempfile.mkdtemp()
+        
+        try:
+            # Clone repository
+            clone_url = repo_url
+            if access_token:
+                # Add token to URL for private repos
+                clone_url = repo_url.replace('https://', f'https://{access_token}@')
+            
+            # Clone command
+            cmd = ['git', 'clone', '--depth', '1', '-b', branch, clone_url, temp_dir]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            
+            if result.returncode != 0:
+                return jsonify({
+                    'error': 'Failed to clone repository',
+                    'details': result.stderr
+                }), 400
+            
+            # Analyze the cloned repository
+            analysis = analyze_project_files(temp_dir, repo_name)
+            
+            # Create project in database
+            project = Project(
+                name=f"{repo_name} (GitHub)",
+                description=f"Security analysis of GitHub repository: {repo_url}",
+                weights={
+                    'functional': 30,
+                    'data': 20,
+                    'journey': 20,
+                    'risk': 20,
+                    'environmental': 10
+                }
+            )
+            
+            db.session.add(project)
+            db.session.commit()
+            
+            # Add analysis results as features
+            for i, vuln in enumerate(analysis['vulnerabilities'][:20]):  # Limit to 20 vulnerabilities
+                feature = Feature(
+                    project_id=project.id,
+                    feature_id=f"VULN_{i+1}",
+                    name=f"{vuln['type']} in {vuln['file']}",
+                    priority='high' if vuln['severity'] in ['Critical', 'High'] else 'medium',
+                    complexity='high',
+                    business_impact='high' if vuln['severity'] == 'Critical' else 'medium',
+                    risk_score=5 if vuln['severity'] == 'Critical' else 3,
+                    status='uncovered',
+                    coverage_percentage=0
+                )
+                db.session.add(feature)
+            
+            db.session.commit()
+            
+            response = {
+                'status': 'success',
+                'message': 'GitHub repository analyzed successfully',
+                'project_id': project.id,
+                'analysis': analysis,
+                'upload_method': 'github'
+            }
+            
+            return jsonify(response)
+            
+        finally:
+            # Clean up temporary directory
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Repository clone timeout. Please try again.'}), 408
+    except Exception as e:
+        return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
+
+@api.route('/projects/upload/file', methods=['POST'])
+def upload_project_file():
+    """
+    Upload and analyze a project file (ZIP, etc.)
+    """
+    try:
+        # Check if file is in request
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'File type not allowed. Please upload ZIP, TAR, or RAR files.'}), 400
+        
+        # Secure filename
+        filename = secure_filename(file.filename)
+        
+        # Create temporary directories
+        upload_path = os.path.join(UPLOAD_FOLDER, filename)
+        extract_dir = tempfile.mkdtemp()
+        
+        try:
+            # Save uploaded file
+            file.save(upload_path)
+            
+            # Extract file based on type
+            if filename.lower().endswith('.zip'):
+                with zipfile.ZipFile(upload_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+            else:
+                return jsonify({'error': 'Currently only ZIP files are supported'}), 400
+            
+            # Get project name from filename
+            project_name = os.path.splitext(filename)[0]
+            
+            # Analyze extracted files
+            analysis = analyze_project_files(extract_dir, project_name)
+            
+            # Create project in database
+            project = Project(
+                name=f"{project_name} (Upload)",
+                description=f"Security analysis of uploaded file: {filename}",
+                weights={
+                    'functional': 30,
+                    'data': 20,
+                    'journey': 20,
+                    'risk': 20,
+                    'environmental': 10
+                }
+            )
+            
+            db.session.add(project)
+            db.session.commit()
+            
+            # Add analysis results as features
+            for i, vuln in enumerate(analysis['vulnerabilities'][:20]):  # Limit to 20 vulnerabilities
+                feature = Feature(
+                    project_id=project.id,
+                    feature_id=f"VULN_{i+1}",
+                    name=f"{vuln['type']} in {vuln['file']}",
+                    priority='high' if vuln['severity'] in ['Critical', 'High'] else 'medium',
+                    complexity='high',
+                    business_impact='high' if vuln['severity'] == 'Critical' else 'medium',
+                    risk_score=5 if vuln['severity'] == 'Critical' else 3,
+                    status='uncovered',
+                    coverage_percentage=0
+                )
+                db.session.add(feature)
+            
+            db.session.commit()
+            
+            response = {
+                'status': 'success',
+                'message': 'File uploaded and analyzed successfully',
+                'project_id': project.id,
+                'analysis': analysis,
+                'upload_method': 'file',
+                'files_count': analysis['total_files']
+            }
+            
+            return jsonify(response)
+            
+        finally:
+            # Clean up files
+            if os.path.exists(upload_path):
+                os.remove(upload_path)
+            shutil.rmtree(extract_dir, ignore_errors=True)
+            
+    except Exception as e:
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+@api.route('/projects/<int:project_id>/vulnerabilities', methods=['GET'])
+def get_project_vulnerabilities(project_id):
+    """
+    Get detailed vulnerability report for a project
+    """
+    try:
+        project = Project.query.get_or_404(project_id)
+        features = Feature.query.filter_by(project_id=project_id).all()
+        
+        # Group vulnerabilities by type
+        vulnerabilities_by_type = {}
+        total_critical = 0
+        total_high = 0
+        total_medium = 0
+        
+        for feature in features:
+            if feature.feature_id.startswith('VULN_'):
+                vuln_type = feature.name.split(' in ')[0]
+                severity = 'Critical' if feature.risk_score == 5 else 'High' if feature.risk_score >= 3 else 'Medium'
+                
+                if vuln_type not in vulnerabilities_by_type:
+                    vulnerabilities_by_type[vuln_type] = []
+                
+                vulnerabilities_by_type[vuln_type].append({
+                    'id': feature.id,
+                    'file': feature.name.split(' in ')[-1] if ' in ' in feature.name else 'Unknown',
+                    'severity': severity,
+                    'risk_score': feature.risk_score,
+                    'status': feature.status,
+                    'priority': feature.priority
+                })
+                
+                # Count by severity
+                if severity == 'Critical':
+                    total_critical += 1
+                elif severity == 'High':
+                    total_high += 1
+                else:
+                    total_medium += 1
+        
+        # Calculate overall risk score
+        total_vulnerabilities = total_critical + total_high + total_medium
+        overall_risk = 0
+        if total_vulnerabilities > 0:
+            overall_risk = ((total_critical * 5) + (total_high * 3) + (total_medium * 1)) / total_vulnerabilities
+        
+        response = {
+            'project_id': project_id,
+            'project_name': project.name,
+            'vulnerabilities_by_type': vulnerabilities_by_type,
+            'summary': {
+                'total_vulnerabilities': total_vulnerabilities,
+                'critical': total_critical,
+                'high': total_high,
+                'medium': total_medium,
+                'overall_risk_score': round(overall_risk, 2)
+            },
+            'recommendations': [
+                'Prioritize fixing critical and high severity vulnerabilities',
+                'Implement automated security scanning in CI/CD pipeline',
+                'Regular security code reviews and dependency updates',
+                'Use static analysis security testing (SAST) tools'
+            ]
+        }
         
         return jsonify(response)
         

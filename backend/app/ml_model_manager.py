@@ -16,6 +16,14 @@ from sklearn.cluster import KMeans
 import warnings
 warnings.filterwarnings('ignore')
 
+# Try to import XGBoost, handle gracefully if not available
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    XGBOOST_AVAILABLE = False
+    logging.warning("XGBoost not available. XGBoost models will use fallback predictions.")
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -54,6 +62,11 @@ class MLModelManager:
             
             if os.path.exists(model_path):
                 try:
+                    # Special handling for XGBoost
+                    if model_name == 'xgboost' and not XGBOOST_AVAILABLE:
+                        logger.warning(f"XGBoost not available, skipping {filename}")
+                        continue
+                    
                     with open(model_path, 'rb') as f:
                         model = pickle.load(f)
                         
@@ -68,11 +81,14 @@ class MLModelManager:
                         logger.info(f"Loaded {model_name} model from {filename}")
                         
                 except Exception as e:
-                    logger.error(f"Failed to load {model_name} from {filename}: {e}")
+                    if model_name == 'xgboost':
+                        logger.warning(f"Failed to load XGBoost from {filename}: {e}. This is normal if XGBoost is not installed.")
+                    else:
+                        logger.error(f"Failed to load {model_name} from {filename}: {e}")
             else:
                 logger.warning(f"Model file not found: {model_path}")
     
-    def prepare_feature_vector(self, feature_data: Dict) -> np.ndarray:
+    def prepare_feature_vector(self, feature_data: Dict, use_scaler: bool = True) -> np.ndarray:
         """
         Prepare feature vector from feature data for model prediction
         """
@@ -83,31 +99,84 @@ class MLModelManager:
             impact_map = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
             status_map = {'covered': 3, 'partial': 2, 'uncovered': 1}
             
-            # Extract features
-            features = [
-                priority_map.get(feature_data.get('priority', 'medium'), 2),
-                complexity_map.get(feature_data.get('complexity', 'medium'), 2),
-                impact_map.get(feature_data.get('business_impact', 'medium'), 2),
-                feature_data.get('risk_score', 1),
-                status_map.get(feature_data.get('status', 'uncovered'), 1),
-                feature_data.get('coverage_percentage', 0),
-                feature_data.get('total_test_cases', 0),
-                feature_data.get('passed_test_cases', 0),
-                feature_data.get('failed_test_cases', 0)
-            ]
+            # Check if scaler is available and how many features it expects
+            if self.scaler is not None and use_scaler:
+                try:
+                    # Try to determine scaler's expected input size
+                    scaler_features = getattr(self.scaler, 'n_features_in_', 4)  # Default to 4
+                    
+                    if scaler_features == 4:
+                        # Original 4-feature format (what your scaler was trained on)
+                        features = [
+                            priority_map.get(feature_data.get('priority', 'medium'), 2),
+                            complexity_map.get(feature_data.get('complexity', 'medium'), 2),
+                            impact_map.get(feature_data.get('business_impact', 'medium'), 2),
+                            feature_data.get('risk_score', 1)
+                        ]
+                    else:
+                        # Extended feature set
+                        features = [
+                            priority_map.get(feature_data.get('priority', 'medium'), 2),
+                            complexity_map.get(feature_data.get('complexity', 'medium'), 2),
+                            impact_map.get(feature_data.get('business_impact', 'medium'), 2),
+                            feature_data.get('risk_score', 1),
+                            status_map.get(feature_data.get('status', 'uncovered'), 1),
+                            feature_data.get('coverage_percentage', 0),
+                            feature_data.get('total_test_cases', 0),
+                            feature_data.get('passed_test_cases', 0),
+                            feature_data.get('failed_test_cases', 0)
+                        ]
+                        
+                except:
+                    # Fallback to 4 features if we can't determine scaler size
+                    features = [
+                        priority_map.get(feature_data.get('priority', 'medium'), 2),
+                        complexity_map.get(feature_data.get('complexity', 'medium'), 2),
+                        impact_map.get(feature_data.get('business_impact', 'medium'), 2),
+                        feature_data.get('risk_score', 1)
+                    ]
+            else:
+                # No scaling - use full feature set
+                features = [
+                    priority_map.get(feature_data.get('priority', 'medium'), 2),
+                    complexity_map.get(feature_data.get('complexity', 'medium'), 2),
+                    impact_map.get(feature_data.get('business_impact', 'medium'), 2),
+                    feature_data.get('risk_score', 1),
+                    status_map.get(feature_data.get('status', 'uncovered'), 1),
+                    feature_data.get('coverage_percentage', 0),
+                    feature_data.get('total_test_cases', 0),
+                    feature_data.get('passed_test_cases', 0),
+                    feature_data.get('failed_test_cases', 0)
+                ]
             
             # Convert to numpy array and reshape for single prediction
             feature_vector = np.array(features).reshape(1, -1)
             
-            # Apply scaling if scaler is available
-            if self.scaler is not None:
-                feature_vector = self.scaler.transform(feature_vector)
+            # Apply scaling if scaler is available and requested
+            if self.scaler is not None and use_scaler:
+                try:
+                    feature_vector = self.scaler.transform(feature_vector)
+                except Exception as scaling_error:
+                    logger.warning(f"Scaling failed: {scaling_error}. Using unscaled features.")
+                    # Don't scale if there's an error
+                    pass
             
             return feature_vector
             
         except Exception as e:
             logger.error(f"Error preparing feature vector: {e}")
-            return np.array([[2, 2, 2, 1, 1, 0, 0, 0, 0]])  # Default values
+            # Return appropriate default based on scaler expectations
+            if self.scaler is not None and use_scaler:
+                try:
+                    scaler_features = getattr(self.scaler, 'n_features_in_', 4)
+                    if scaler_features == 4:
+                        return np.array([[2, 2, 2, 1]])  # 4 features default
+                    else:
+                        return np.array([[2, 2, 2, 1, 1, 0, 0, 0, 0]])  # 9 features default
+                except:
+                    return np.array([[2, 2, 2, 1]])  # Safe fallback
+            else:
+                return np.array([[2, 2, 2, 1, 1, 0, 0, 0, 0]])  # 9 features default
     
     def predict_coverage_risk(self, feature_data: Dict, model_name: str = 'random_forest') -> Dict:
         """
@@ -160,7 +229,8 @@ class MLModelManager:
             # Prepare feature matrix
             feature_matrix = []
             for feature_data in features_data:
-                feature_vector = self.prepare_feature_vector(feature_data).flatten()
+                # For clustering, we might not need scaling depending on the k-means model
+                feature_vector = self.prepare_feature_vector(feature_data, use_scaler=False).flatten()
                 feature_matrix.append(feature_vector)
             
             feature_matrix = np.array(feature_matrix)
