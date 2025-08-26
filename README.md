@@ -28,12 +28,12 @@ The repository is organized for both extensibility and clarity, with detailed wo
 flowchart TD
     A[User Input/API Request] --> B{Input Handler}
     B -->|Manual| C[Input Parsing & Preprocessing]
-    B -->|API| D[Backend Server (FastAPI/Flask)]
+    B -->|API| D[Backend Server]
     C --> E[Core Workflow Orchestrator]
     D --> E
     E --> F[Code & Test Coverage Analyzer]
     E --> G[Vulnerability Scanner]
-    E --> H[LLM Integration (HuggingFace/OpenAI)]
+    E --> H[LLM Integration]
     F --> I[Coverage Report Generator]
     G --> I
     H --> I
