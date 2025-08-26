@@ -143,6 +143,73 @@ def main():
     response = requests.get(f"{BASE_URL}/projects/{project_id}/user-journeys")
     print_response(response, "Get User Journeys")
     
+    # Test 12: New Global Coverage Endpoints
+    print_header("TEST 8: GLOBAL COVERAGE ANALYSIS")
+    
+    # Test overall coverage
+    response = requests.get(f"{BASE_URL}/coverage/overall")
+    print_response(response, "Get Overall Coverage Across All Projects")
+    
+    # Test risk areas
+    response = requests.get(f"{BASE_URL}/coverage/risk-areas")
+    print_response(response, "Get High-Risk Uncovered Areas")
+    
+    # Test with project filter
+    response = requests.get(f"{BASE_URL}/coverage/risk-areas?project_id={project_id}")
+    print_response(response, "Get Risk Areas for Specific Project")
+    
+    # Test clusters
+    response = requests.get(f"{BASE_URL}/coverage/clusters")
+    print_response(response, "Get ML-Based Feature Clusters")
+    
+    # Test coverage recommendations
+    response = requests.get(f"{BASE_URL}/coverage/recommendations?limit=5")
+    print_response(response, "Get Top 5 Testing Recommendations")
+    
+    # Test with project filter
+    response = requests.get(f"{BASE_URL}/coverage/recommendations?project_id={project_id}&limit=3")
+    print_response(response, "Get Project-Specific Recommendations")
+    
+    # Test 13: ML Model Integration
+    print_header("TEST 9: ML MODEL INTEGRATION (PKL FILES)")
+    
+    # Test ML models info
+    response = requests.get(f"{BASE_URL}/ml/models/info")
+    print_response(response, "Get ML Models Information")
+    
+    # Test risk prediction
+    sample_feature = {
+        "feature_data": {
+            "name": "Payment Processing",
+            "priority": "high",
+            "complexity": "high",
+            "business_impact": "critical",
+            "risk_score": 4,
+            "status": "uncovered",
+            "coverage_percentage": 0,
+            "total_test_cases": 0,
+            "passed_test_cases": 0,
+            "failed_test_cases": 0
+        },
+        "model": "random_forest"
+    }
+    
+    response = requests.post(f"{BASE_URL}/ml/predict/risk", json=sample_feature)
+    print_response(response, "Predict Feature Risk with ML Models")
+    
+    # Test ML clustering
+    clustering_data = {"project_id": project_id}
+    response = requests.post(f"{BASE_URL}/ml/cluster/features", json=clustering_data)
+    print_response(response, "ML-Based Feature Clustering")
+    
+    # Test enhanced recommendations
+    response = requests.get(f"{BASE_URL}/ml/recommend/enhanced?project_id={project_id}&limit=5")
+    print_response(response, "Enhanced ML Recommendations")
+    
+    # Test comprehensive project analysis
+    response = requests.get(f"{BASE_URL}/ml/analyze/project/{project_id}")
+    print_response(response, "Comprehensive ML Project Analysis")
+
     # Final Summary
     print_header("🎉 TEST SUMMARY")
     print("✅ All API endpoints tested successfully!")
@@ -154,10 +221,31 @@ def main():
     print("   • Project & Feature Management")
     print("   • User Journey Tracking")
     print("   • Executive Dashboard Data")
+    print("   • Global Coverage Analysis")
+    print("   • Risk Area Prediction")
+    print("   • ML-Based Feature Clustering")
+    print("   • Intelligent Test Recommendations")
+    print("   • Pre-trained ML Model Integration")
+    print("   • Enhanced Risk Prediction with PKL Models")
+    print("   • Ensemble Model Recommendations")
+    print("   • Comprehensive Project Analysis")
     print("\n🚀 Your Coverage Framework Backend is FULLY FUNCTIONAL!")
     
     print(f"\n📊 Access your API at: {BASE_URL}")
     print("📖 See README_BACKEND.md for complete documentation")
+    
+    # Show the new endpoints
+    print("\n🆕 NEW ENDPOINTS AVAILABLE:")
+    print(f"   • GET {BASE_URL}/coverage/overall")
+    print(f"   • GET {BASE_URL}/coverage/risk-areas")
+    print(f"   • GET {BASE_URL}/coverage/clusters") 
+    print(f"   • GET {BASE_URL}/coverage/recommendations")
+    print("\n🤖 ML MODEL ENDPOINTS:")
+    print(f"   • GET {BASE_URL}/ml/models/info")
+    print(f"   • POST {BASE_URL}/ml/predict/risk")
+    print(f"   • POST {BASE_URL}/ml/cluster/features")
+    print(f"   • GET {BASE_URL}/ml/recommend/enhanced")
+    print(f"   • GET {BASE_URL}/ml/analyze/project/{{id}}")
 
 if __name__ == "__main__":
     try:

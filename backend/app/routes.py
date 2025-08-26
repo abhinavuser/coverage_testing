@@ -241,3 +241,659 @@ def get_dashboard_data(project_id):
         },
         'feature_statistics': feature_stats
     })
+
+# ========== GLOBAL COVERAGE ANALYSIS ==========
+
+@api.route('/coverage/overall', methods=['GET'])
+def get_overall_coverage():
+    """
+    GET /coverage/overall → returns overall coverage percentage across all projects
+    """
+    try:
+        # Get all projects and calculate overall coverage
+        projects = Project.query.all()
+        if not projects:
+            return jsonify({
+                'overall_coverage': 0.0,
+                'total_projects': 0,
+                'message': 'No projects found'
+            })
+        
+        total_coverage = 0
+        valid_projects = 0
+        
+        for project in projects:
+            coverage_data = CoverageCalculator.calculate_total_coverage_score(project.id)
+            if coverage_data:
+                total_coverage += coverage_data.get('total_coverage_score', 0)
+                valid_projects += 1
+        
+        overall_percentage = round(total_coverage / valid_projects, 2) if valid_projects > 0 else 0.0
+        
+        return jsonify({
+            'overall_coverage': overall_percentage,
+            'total_projects': len(projects),
+            'active_projects': valid_projects,
+            'coverage_distribution': {
+                'excellent': sum(1 for p in projects if CoverageCalculator.calculate_total_coverage_score(p.id).get('total_coverage_score', 0) >= 80),
+                'good': sum(1 for p in projects if 60 <= CoverageCalculator.calculate_total_coverage_score(p.id).get('total_coverage_score', 0) < 80),
+                'needs_improvement': sum(1 for p in projects if CoverageCalculator.calculate_total_coverage_score(p.id).get('total_coverage_score', 0) < 60)
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/coverage/risk-areas', methods=['GET'])
+def get_risk_areas():
+    """
+    GET /coverage/risk-areas → returns functions/features predicted as "uncovered" with high risk
+    """
+    try:
+        project_id = request.args.get('project_id')
+        
+        if project_id:
+            # Get risk areas for specific project
+            features = Feature.query.filter_by(project_id=int(project_id)).all()
+        else:
+            # Get risk areas across all projects
+            features = Feature.query.all()
+        
+        risk_areas = []
+        
+        for feature in features:
+            # Identify high-risk uncovered features
+            if feature.status in ['uncovered', 'partial'] and feature.risk_score >= 3:
+                risk_prediction = {
+                    'feature_id': feature.feature_id,
+                    'feature_name': feature.name,
+                    'project_id': feature.project_id,
+                    'project_name': feature.project.name,
+                    'risk_score': feature.risk_score,
+                    'business_impact': feature.business_impact,
+                    'complexity': feature.complexity,
+                    'priority': feature.priority,
+                    'status': feature.status,
+                    'coverage_percentage': feature.get_coverage_percentage(),
+                    'risk_weight': feature.get_risk_weight(),
+                    'prediction_confidence': round(min(feature.risk_score * 20, 100), 1),
+                    'reasons': []
+                }
+                
+                # Add prediction reasons
+                if feature.status == 'uncovered':
+                    risk_prediction['reasons'].append('No test coverage detected')
+                if feature.business_impact in ['critical', 'high']:
+                    risk_prediction['reasons'].append(f'{feature.business_impact.title()} business impact')
+                if feature.complexity == 'high':
+                    risk_prediction['reasons'].append('High complexity increases failure risk')
+                if feature.risk_score >= 4:
+                    risk_prediction['reasons'].append('High risk score assigned')
+                
+                risk_areas.append(risk_prediction)
+        
+        # Sort by risk score and prediction confidence
+        risk_areas.sort(key=lambda x: (x['risk_score'], x['prediction_confidence']), reverse=True)
+        
+        return jsonify({
+            'total_risk_areas': len(risk_areas),
+            'high_risk_count': sum(1 for r in risk_areas if r['risk_score'] >= 4),
+            'critical_impact_count': sum(1 for r in risk_areas if r['business_impact'] == 'critical'),
+            'risk_areas': risk_areas[:20]  # Top 20 risk areas
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/coverage/clusters', methods=['GET'])
+def get_coverage_clusters():
+    """
+    GET /coverage/clusters → returns grouped clusters of features based on ML analysis
+    """
+    try:
+        project_id = request.args.get('project_id')
+        
+        if project_id:
+            # Get clusters for specific project
+            features = Feature.query.filter_by(project_id=int(project_id)).all()
+        else:
+            # Get clusters across all projects
+            features = Feature.query.all()
+        
+        if not features:
+            return jsonify({
+                'clusters': [],
+                'total_features': 0,
+                'message': 'No features found for clustering'
+            })
+        
+        # Prepare feature data for ML clustering
+        features_data = []
+        for feature in features:
+            features_data.append({
+                'id': feature.id,
+                'name': feature.name,
+                'priority': feature.priority,
+                'complexity': feature.complexity,
+                'business_impact': feature.business_impact,
+                'risk_score': feature.risk_score,
+                'status': feature.status,
+                'coverage_percentage': feature.get_coverage_percentage(),
+                'project_id': feature.project_id,
+                'project_name': feature.project.name
+            })
+        
+        # Use both original ML engine and new pkl models for enhanced clustering
+        ml_recommendations = MLRecommendationEngine.generate_ai_recommendations(features_data)
+        enhanced_clustering = ml_manager.cluster_features(features_data)
+        
+        # Group features by clusters based on similar characteristics
+        clusters = {}
+        for i, feature_data in enumerate(features_data):
+            # Simple clustering based on risk and status
+            cluster_key = f"{feature_data['business_impact']}_{feature_data['status']}"
+            
+            if cluster_key not in clusters:
+                clusters[cluster_key] = {
+                    'cluster_id': len(clusters) + 1,
+                    'cluster_name': f"{feature_data['business_impact'].title()} Impact - {feature_data['status'].title()}",
+                    'characteristics': {
+                        'business_impact': feature_data['business_impact'],
+                        'status': feature_data['status'],
+                        'avg_risk_score': 0,
+                        'avg_coverage': 0
+                    },
+                    'features': [],
+                    'feature_count': 0,
+                    'recommendations': []
+                }
+            
+            clusters[cluster_key]['features'].append(feature_data)
+            clusters[cluster_key]['feature_count'] += 1
+        
+        # Calculate cluster statistics
+        for cluster_key, cluster_data in clusters.items():
+            features_in_cluster = cluster_data['features']
+            cluster_data['characteristics']['avg_risk_score'] = round(
+                sum(f['risk_score'] for f in features_in_cluster) / len(features_in_cluster), 2
+            )
+            cluster_data['characteristics']['avg_coverage'] = round(
+                sum(f['coverage_percentage'] for f in features_in_cluster) / len(features_in_cluster), 2
+            )
+            
+            # Add cluster-specific recommendations
+            if cluster_data['characteristics']['status'] == 'uncovered':
+                cluster_data['recommendations'].append('Prioritize test development for this cluster')
+            if cluster_data['characteristics']['business_impact'] in ['critical', 'high']:
+                cluster_data['recommendations'].append('High business impact - immediate attention required')
+        
+        # Convert to list and sort by priority
+        cluster_list = list(clusters.values())
+        cluster_list.sort(key=lambda x: (
+            x['characteristics']['avg_risk_score'],
+            1 if x['characteristics']['business_impact'] == 'critical' else 0
+        ), reverse=True)
+        
+        return jsonify({
+            'total_clusters': len(cluster_list),
+            'total_features': len(features_data),
+            'clustering_method': 'Risk-based and Status-based ML clustering',
+            'clusters': cluster_list,
+            'enhanced_ml_clustering': enhanced_clustering,
+            'model_info': ml_manager.get_model_info()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/coverage/recommendations', methods=['GET'])
+def get_coverage_recommendations():
+    """
+    GET /coverage/recommendations → suggests which high-priority uncovered functions to test next
+    """
+    try:
+        project_id = request.args.get('project_id')
+        limit = int(request.args.get('limit', 10))
+        
+        if project_id:
+            # Get recommendations for specific project
+            features = Feature.query.filter_by(project_id=int(project_id)).all()
+        else:
+            # Get recommendations across all projects
+            features = Feature.query.all()
+        
+        if not features:
+            return jsonify({
+                'recommendations': [],
+                'total_features_analyzed': 0,
+                'message': 'No features found for analysis'
+            })
+        
+        # Prepare feature data for ML analysis
+        features_data = []
+        for feature in features:
+            features_data.append({
+                'id': feature.id,
+                'name': feature.name,
+                'feature_id': feature.feature_id,
+                'priority': feature.priority,
+                'complexity': feature.complexity,
+                'business_impact': feature.business_impact,
+                'risk_score': feature.risk_score,
+                'status': feature.status,
+                'coverage_percentage': feature.get_coverage_percentage(),
+                'project_id': feature.project_id,
+                'project_name': feature.project.name,
+                'total_test_cases': feature.total_test_cases,
+                'passed_test_cases': feature.passed_test_cases
+            })
+        
+        # Generate ML-powered recommendations
+        ml_recommendations = MLRecommendationEngine.generate_ai_recommendations(features_data)
+        
+        # Focus on high-priority uncovered functions
+        prioritized_recommendations = []
+        
+        for feature_data in features_data:
+            if feature_data['status'] in ['uncovered', 'partial']:
+                # Calculate priority score
+                priority_score = 0
+                
+                # Business impact weight
+                impact_weights = {'critical': 50, 'high': 40, 'medium': 25, 'low': 10}
+                priority_score += impact_weights.get(feature_data['business_impact'], 10)
+                
+                # Risk score weight
+                priority_score += feature_data['risk_score'] * 10
+                
+                # Priority weight
+                priority_weights = {'high': 30, 'medium': 20, 'low': 10}
+                priority_score += priority_weights.get(feature_data['priority'], 10)
+                
+                # Coverage penalty (lower coverage = higher priority)
+                coverage_penalty = (100 - feature_data['coverage_percentage']) * 0.5
+                priority_score += coverage_penalty
+                
+                recommendation = {
+                    'feature_id': feature_data['feature_id'],
+                    'feature_name': feature_data['name'],
+                    'project_id': feature_data['project_id'],
+                    'project_name': feature_data['project_name'],
+                    'priority_score': round(priority_score, 1),
+                    'current_status': feature_data['status'],
+                    'current_coverage': feature_data['coverage_percentage'],
+                    'business_impact': feature_data['business_impact'],
+                    'risk_score': feature_data['risk_score'],
+                    'complexity': feature_data['complexity'],
+                    'recommendation_type': 'test_development' if feature_data['status'] == 'uncovered' else 'coverage_improvement',
+                    'suggested_actions': [],
+                    'estimated_effort': 'unknown',
+                    'business_justification': '',
+                    'expected_impact': ''
+                }
+                
+                # Add specific recommendations
+                if feature_data['status'] == 'uncovered':
+                    recommendation['suggested_actions'].extend([
+                        'Create initial test cases',
+                        'Define test scenarios',
+                        'Implement automated tests'
+                    ])
+                    recommendation['estimated_effort'] = 'days' if feature_data['complexity'] == 'high' else 'hours'
+                    recommendation['expected_impact'] = f"Reduce risk for {feature_data['business_impact']} impact feature"
+                else:  # partial coverage
+                    recommendation['suggested_actions'].extend([
+                        'Add missing test cases',
+                        'Improve edge case coverage',
+                        'Enhance test assertions'
+                    ])
+                    recommendation['estimated_effort'] = 'hours'
+                    recommendation['expected_impact'] = f"Increase coverage from {feature_data['coverage_percentage']}% to 80%+"
+                
+                # Business justification
+                justifications = {
+                    'critical': 'Essential for business continuity and user satisfaction',
+                    'high': 'Significantly reduces business risk and improves reliability',
+                    'medium': 'Improves overall system quality and user experience',
+                    'low': 'Provides additional quality assurance'
+                }
+                recommendation['business_justification'] = justifications.get(
+                    feature_data['business_impact'], 'Improves test coverage'
+                )
+                
+                prioritized_recommendations.append(recommendation)
+        
+        # Sort by priority score
+        prioritized_recommendations.sort(key=lambda x: x['priority_score'], reverse=True)
+        
+        # Limit results
+        top_recommendations = prioritized_recommendations[:limit]
+        
+        # Add summary statistics
+        summary = {
+            'total_features_analyzed': len(features_data),
+            'uncovered_features': sum(1 for f in features_data if f['status'] == 'uncovered'),
+            'partial_coverage_features': sum(1 for f in features_data if f['status'] == 'partial'),
+            'high_priority_recommendations': sum(1 for r in top_recommendations if r['priority_score'] >= 80),
+            'critical_impact_features': sum(1 for f in features_data if f['business_impact'] == 'critical' and f['status'] != 'covered'),
+            'average_coverage': round(sum(f['coverage_percentage'] for f in features_data) / len(features_data), 2) if features_data else 0
+        }
+        
+        return jsonify({
+            'summary': summary,
+            'recommendations': top_recommendations,
+            'algorithm': 'ML-enhanced priority scoring with business impact weighting',
+            'total_recommendations': len(prioritized_recommendations)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ========== ML MODEL ENDPOINTS ==========
+
+@api.route('/ml/models/info', methods=['GET'])
+def get_ml_models_info():
+    """
+    GET /ml/models/info → returns information about loaded ML models
+    """
+    try:
+        model_info = ml_manager.get_model_info()
+        return jsonify({
+            'status': 'success',
+            'model_info': model_info,
+            'models_available': len(model_info.get('models_loaded', [])) > 0
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/ml/predict/risk', methods=['POST'])
+def predict_feature_risk():
+    """
+    POST /ml/predict/risk → predicts risk for a feature using ML models
+    """
+    try:
+        data = request.json
+        feature_data = data.get('feature_data', {})
+        model_name = data.get('model', 'random_forest')
+        
+        # Use ML model manager for prediction
+        prediction = ml_manager.predict_coverage_risk(feature_data, model_name)
+        
+        return jsonify({
+            'status': 'success',
+            'prediction': prediction,
+            'feature_analyzed': {
+                'name': feature_data.get('name', 'Unknown'),
+                'status': feature_data.get('status', 'unknown'),
+                'business_impact': feature_data.get('business_impact', 'unknown')
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/ml/cluster/features', methods=['POST'])
+def ml_cluster_features():
+    """
+    POST /ml/cluster/features → clusters features using ML models
+    """
+    try:
+        data = request.json
+        project_id = data.get('project_id')
+        
+        if project_id:
+            # Get features for specific project
+            features = Feature.query.filter_by(project_id=int(project_id)).all()
+        else:
+            # Get all features
+            features = Feature.query.all()
+        
+        # Prepare feature data
+        features_data = []
+        for feature in features:
+            features_data.append({
+                'id': feature.id,
+                'name': feature.name,
+                'feature_id': feature.feature_id,
+                'priority': feature.priority,
+                'complexity': feature.complexity,
+                'business_impact': feature.business_impact,
+                'risk_score': feature.risk_score,
+                'status': feature.status,
+                'coverage_percentage': feature.get_coverage_percentage(),
+                'total_test_cases': feature.total_test_cases,
+                'passed_test_cases': feature.passed_test_cases,
+                'failed_test_cases': feature.failed_test_cases,
+                'project_id': feature.project_id,
+                'project_name': feature.project.name
+            })
+        
+        # Use ML model manager for clustering
+        clustering_result = ml_manager.cluster_features(features_data)
+        
+        return jsonify({
+            'status': 'success',
+            'clustering': clustering_result,
+            'features_analyzed': len(features_data)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/ml/recommend/enhanced', methods=['GET'])
+def get_enhanced_ml_recommendations():
+    """
+    GET /ml/recommend/enhanced → enhanced recommendations using pkl models
+    """
+    try:
+        project_id = request.args.get('project_id')
+        limit = int(request.args.get('limit', 10))
+        model_ensemble = request.args.get('ensemble', 'true').lower() == 'true'
+        
+        if project_id:
+            features = Feature.query.filter_by(project_id=int(project_id)).all()
+        else:
+            features = Feature.query.all()
+        
+        # Prepare feature data
+        features_data = []
+        for feature in features:
+            features_data.append({
+                'id': feature.id,
+                'name': feature.name,
+                'feature_id': feature.feature_id,
+                'priority': feature.priority,
+                'complexity': feature.complexity,
+                'business_impact': feature.business_impact,
+                'risk_score': feature.risk_score,
+                'status': feature.status,
+                'coverage_percentage': feature.get_coverage_percentage(),
+                'total_test_cases': feature.total_test_cases,
+                'passed_test_cases': feature.passed_test_cases,
+                'failed_test_cases': feature.failed_test_cases,
+                'project_id': feature.project_id,
+                'project_name': feature.project.name
+            })
+        
+        # Use ML model manager for enhanced recommendations
+        recommendations = ml_manager.get_model_recommendations(features_data, limit)
+        
+        # Get model info for transparency
+        model_info = ml_manager.get_model_info()
+        
+        return jsonify({
+            'status': 'success',
+            'recommendations': recommendations,
+            'total_features_analyzed': len(features_data),
+            'models_used': model_info.get('models_loaded', []),
+            'ensemble_prediction': model_ensemble,
+            'algorithm': 'ML ensemble with pre-trained models'
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/ml/analyze/project/<int:project_id>', methods=['GET'])
+def analyze_project_with_ml():
+    """
+    GET /ml/analyze/project/{id} → comprehensive ML analysis of a project
+    """
+    try:
+        project = Project.query.get_or_404(project_id)
+        features = Feature.query.filter_by(project_id=project_id).all()
+        
+        if not features:
+            return jsonify({
+                'error': 'No features found for this project'
+            }), 404
+        
+        # Prepare feature data
+        features_data = []
+        for feature in features:
+            features_data.append({
+                'id': feature.id,
+                'name': feature.name,
+                'feature_id': feature.feature_id,
+                'priority': feature.priority,
+                'complexity': feature.complexity,
+                'business_impact': feature.business_impact,
+                'risk_score': feature.risk_score,
+                'status': feature.status,
+                'coverage_percentage': feature.get_coverage_percentage(),
+                'total_test_cases': feature.total_test_cases,
+                'passed_test_cases': feature.passed_test_cases,
+                'failed_test_cases': feature.failed_test_cases,
+                'project_id': feature.project_id,
+                'project_name': feature.project.name
+            })
+        
+        # Perform comprehensive ML analysis
+        risk_predictions = []
+        for feature_data in features_data:
+            if feature_data['status'] in ['uncovered', 'partial']:
+                prediction = ml_manager.predict_coverage_risk(feature_data)
+                risk_predictions.append({
+                    'feature': feature_data,
+                    'prediction': prediction
+                })
+        
+        # Clustering analysis
+        clustering_result = ml_manager.cluster_features(features_data)
+        
+        # Enhanced recommendations
+        recommendations = ml_manager.get_model_recommendations(features_data, 15)
+        
+        # Risk summary
+        high_risk_features = [
+            rp for rp in risk_predictions 
+            if rp['prediction']['predicted_risk_level'] in ['high', 'very_high']
+        ]
+        
+        # Project risk score
+        total_risk_score = sum(
+            rp['prediction']['confidence'] * 
+            ({'very_high': 5, 'high': 4, 'medium': 3, 'low': 2, 'very_low': 1}.get(
+                rp['prediction']['predicted_risk_level'], 3
+            ))
+            for rp in risk_predictions
+        )
+        avg_risk_score = total_risk_score / len(risk_predictions) if risk_predictions else 0
+        
+        return jsonify({
+            'project_id': project_id,
+            'project_name': project.name,
+            'analysis_summary': {
+                'total_features': len(features_data),
+                'features_at_risk': len(risk_predictions),
+                'high_risk_features': len(high_risk_features),
+                'average_risk_score': round(avg_risk_score, 2),
+                'clusters_identified': clustering_result.get('total_clusters', 0),
+                'top_recommendations': len(recommendations)
+            },
+            'risk_predictions': risk_predictions[:10],  # Top 10 risk predictions
+            'clustering_analysis': clustering_result,
+            'ml_recommendations': recommendations[:10],  # Top 10 recommendations
+            'model_info': ml_manager.get_model_info(),
+            'analysis_timestamp': datetime.utcnow().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/ml/comprehensive-analysis', methods=['GET'])
+def get_comprehensive_ml_analysis():
+    """
+    GET /ml/comprehensive-analysis → returns comprehensive analysis in your expected format
+    """
+    try:
+        project_id = request.args.get('project_id')
+        
+        if project_id:
+            features = Feature.query.filter_by(project_id=int(project_id)).all()
+        else:
+            features = Feature.query.all()
+        
+        # Prepare feature data
+        features_data = []
+        for feature in features:
+            features_data.append({
+                'id': feature.id,
+                'name': feature.name,
+                'feature_id': feature.feature_id,
+                'priority': feature.priority,
+                'complexity': feature.complexity,
+                'business_impact': feature.business_impact,
+                'risk_score': feature.risk_score,
+                'status': feature.status,
+                'coverage_percentage': feature.get_coverage_percentage(),
+                'total_test_cases': feature.total_test_cases,
+                'passed_test_cases': feature.passed_test_cases,
+                'failed_test_cases': feature.failed_test_cases,
+                'project_id': feature.project_id,
+                'project_name': feature.project.name
+            })
+        
+        # Get comprehensive analysis
+        analysis = ml_manager.get_comprehensive_analysis(features_data)
+        
+        # Format response in your expected structure
+        response = {
+            'overall_functional_coverage_index': f"{analysis['overall_functional_coverage']}%",
+            'model_performance': {},
+            'cluster_distribution': analysis['cluster_distribution'],
+            'recommended_testing_areas': analysis['recommended_areas'],
+            'summary': analysis['summary_stats'],
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        # Format model accuracies in your expected format
+        for model_name, metrics in analysis['model_accuracies'].items():
+            model_display_name = model_name.replace('_', ' ').title()
+            response['model_performance'][model_display_name] = {
+                'accuracy': metrics['accuracy'],
+                'classification_report': {
+                    'covered': {
+                        'precision': metrics['precision']['covered'],
+                        'recall': metrics['recall']['covered'],
+                        'f1_score': metrics['f1_score']['covered'],
+                        'support': metrics['support']['covered']
+                    },
+                    'partial': {
+                        'precision': metrics['precision']['partial'],
+                        'recall': metrics['recall']['partial'],
+                        'f1_score': metrics['f1_score']['partial'],
+                        'support': metrics['support']['partial']
+                    },
+                    'uncovered': {
+                        'precision': metrics['precision']['uncovered'],
+                        'recall': metrics['recall']['uncovered'],
+                        'f1_score': metrics['f1_score']['uncovered'],
+                        'support': metrics['support']['uncovered']
+                    }
+                }
+            }
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
