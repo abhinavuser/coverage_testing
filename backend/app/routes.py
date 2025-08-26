@@ -1,5 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
+import os
+import tempfile
 from . import db
 from .models import (
     Project, Feature, TestCase, UserJourney, Environment, 
@@ -7,6 +9,8 @@ from .models import (
 )
 from .utils import CoverageCalculator, GapAnalyzer, RecommendationGenerator
 from .ml_engine import MLRecommendationEngine
+from .coverage_generator import CoverageDatasetGenerator
+from .llm_analyzer import LLMAnalyzer
 
 api = Blueprint('api', __name__)
 
