@@ -8,7 +8,7 @@ This guide explains the complete workflow from input (GitHub repo, ZIP file, or 
 
 Your Hugging Face API key is already configured:
 ```
-
+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
 ```
 
 ## 📋 Complete Workflow Steps
@@ -278,7 +278,7 @@ curl -X POST http://localhost:5000/api/coverage/docker-compose \
 ### Environment Variables
 ```bash
 # Required
-HUGGINGFACE_API_KEY=
+HUGGINGFACE_API_KEY=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
 
 # Optional
 FLASK_ENV=development
@@ -326,7 +326,7 @@ All required dependencies are in `backend/requirements.txt`:
 echo $HUGGINGFACE_API_KEY
 
 # Set in .env file
-echo "HUGGINGFACE_API_KEY=" > .env
+echo "HUGGINGFACE_API_KEY=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" > .env
 ```
 
 #### 2. Dependencies Missing

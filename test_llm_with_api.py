@@ -9,7 +9,7 @@ import requests
 import json
 
 # Set your API key
-API_KEY = ""
+API_KEY = "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"
 os.environ['HUGGINGFACE_API_KEY'] = API_KEY
 
 def test_llm_analyzer():

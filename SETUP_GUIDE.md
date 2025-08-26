@@ -8,7 +8,7 @@ Create a file named `.env` (with the dot) in your project root directory:
 # Copy this content to a file named ".env" in your project root
 
 # Hugging Face API Key for LLM Integration
-HUGGINGFACE_API_KEY=
+HUGGINGFACE_API_KEY=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
 
 # Flask Configuration
 FLASK_ENV=development

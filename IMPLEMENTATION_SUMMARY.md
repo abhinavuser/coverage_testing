@@ -114,7 +114,8 @@ curl -X POST http://localhost:5000/api/coverage/docker-compose \
 
 ### API Key
 Your Hugging Face API key is configured:
-
+```
+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
 ```
 
 ### Dependencies

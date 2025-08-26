@@ -5,7 +5,7 @@ Simple script to create .env file with proper encoding
 
 def create_env_file():
     """Create .env file with proper UTF-8 encoding"""
-    api_key = ""
+    api_key = "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"
     
     with open('.env', 'w', encoding='utf-8') as f:
         f.write(f"HUGGINGFACE_API_KEY={api_key}\n")
