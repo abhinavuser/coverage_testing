@@ -99,6 +99,19 @@ Where: Wi = Weight, Ci = Coverage %, Ri = Risk factor
 ### Dashboard
 - `GET /api/projects/{id}/dashboard` - Get comprehensive dashboard data
 
+### Global Coverage Analysis
+- `GET /api/coverage/overall` - Get overall coverage percentage across all projects
+- `GET /api/coverage/risk-areas` - Get functions/features predicted as "uncovered" with high risk
+- `GET /api/coverage/clusters` - Get ML-based feature clusters grouped by characteristics
+- `GET /api/coverage/recommendations` - Get intelligent testing recommendations for high-priority uncovered functions
+
+### ML Model Integration (PKL Models)
+- `GET /api/ml/models/info` - Get information about loaded pre-trained ML models
+- `POST /api/ml/predict/risk` - Predict feature risk using pre-trained ML models
+- `POST /api/ml/cluster/features` - Cluster features using pre-trained K-means model
+- `GET /api/ml/recommend/enhanced` - Get enhanced recommendations using ensemble of ML models
+- `GET /api/ml/analyze/project/{id}` - Comprehensive ML analysis of a project
+
 ## 🤖 AI-Powered Features
 
 ### ML Recommendation Engine
@@ -183,6 +196,82 @@ curl -X POST http://localhost:5000/api/projects/1/coverage/calculate
 ### Generate Recommendations
 ```bash
 curl -X POST http://localhost:5000/api/projects/1/recommendations/generate
+```
+
+### Get Overall Coverage
+```bash
+curl http://localhost:5000/api/coverage/overall
+```
+
+### Get High-Risk Areas
+```bash
+# All projects
+curl http://localhost:5000/api/coverage/risk-areas
+
+# Specific project
+curl http://localhost:5000/api/coverage/risk-areas?project_id=1
+```
+
+### Get Feature Clusters
+```bash
+# All projects
+curl http://localhost:5000/api/coverage/clusters
+
+# Specific project
+curl http://localhost:5000/api/coverage/clusters?project_id=1
+```
+
+### Get Testing Recommendations
+```bash
+# Top 10 recommendations (default)
+curl http://localhost:5000/api/coverage/recommendations
+
+# Top 5 recommendations for specific project
+curl http://localhost:5000/api/coverage/recommendations?project_id=1&limit=5
+```
+
+### ML Model Information
+```bash
+curl http://localhost:5000/api/ml/models/info
+```
+
+### Predict Feature Risk with ML
+```bash
+curl -X POST http://localhost:5000/api/ml/predict/risk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feature_data": {
+      "name": "Payment Processing",
+      "priority": "high",
+      "complexity": "high", 
+      "business_impact": "critical",
+      "risk_score": 4,
+      "status": "uncovered",
+      "coverage_percentage": 0
+    },
+    "model": "random_forest"
+  }'
+```
+
+### ML-Based Feature Clustering
+```bash
+curl -X POST http://localhost:5000/api/ml/cluster/features \
+  -H "Content-Type: application/json" \
+  -d '{"project_id": 1}'
+```
+
+### Enhanced ML Recommendations
+```bash
+# Get enhanced recommendations using ensemble models
+curl http://localhost:5000/api/ml/recommend/enhanced?project_id=1&limit=10
+
+# All projects with ensemble prediction
+curl http://localhost:5000/api/ml/recommend/enhanced?ensemble=true&limit=15
+```
+
+### Comprehensive Project Analysis
+```bash
+curl http://localhost:5000/api/ml/analyze/project/1
 ```
 
 ## 🛠️ Configuration

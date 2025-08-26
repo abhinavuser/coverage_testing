@@ -1,0 +1,303 @@
+{
+  "info": {
+    "name": "5D Coverage Framework API",
+    "description": "Complete API collection for testing the 5-Dimensional Coverage Framework with ML Model Integration",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Global Coverage Analysis",
+      "item": [
+        {
+          "name": "Get Overall Coverage",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/coverage/overall",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "coverage", "overall"]
+            }
+          }
+        },
+        {
+          "name": "Get Risk Areas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/coverage/risk-areas",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "coverage", "risk-areas"]
+            }
+          }
+        },
+        {
+          "name": "Get Risk Areas (Project Specific)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/coverage/risk-areas?project_id=1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "coverage", "risk-areas"],
+              "query": [
+                {
+                  "key": "project_id",
+                  "value": "1"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Feature Clusters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/coverage/clusters",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "coverage", "clusters"]
+            }
+          }
+        },
+        {
+          "name": "Get Coverage Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/coverage/recommendations?limit=10",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "coverage", "recommendations"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "ML Model Integration",
+      "item": [
+        {
+          "name": "Get ML Models Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/ml/models/info",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "ml", "models", "info"]
+            }
+          }
+        },
+        {
+          "name": "Predict Feature Risk",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feature_data\": {\n    \"name\": \"Payment Processing\",\n    \"priority\": \"high\",\n    \"complexity\": \"high\",\n    \"business_impact\": \"critical\",\n    \"risk_score\": 4,\n    \"status\": \"uncovered\",\n    \"coverage_percentage\": 0,\n    \"total_test_cases\": 0,\n    \"passed_test_cases\": 0,\n    \"failed_test_cases\": 0\n  },\n  \"model\": \"random_forest\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/ml/predict/risk",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "ml", "predict", "risk"]
+            }
+          }
+        },
+        {
+          "name": "Predict Risk - XGBoost Model",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feature_data\": {\n    \"name\": \"User Authentication\",\n    \"priority\": \"high\",\n    \"complexity\": \"medium\",\n    \"business_impact\": \"critical\",\n    \"risk_score\": 5,\n    \"status\": \"partial\",\n    \"coverage_percentage\": 30,\n    \"total_test_cases\": 10,\n    \"passed_test_cases\": 3,\n    \"failed_test_cases\": 0\n  },\n  \"model\": \"xgboost\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/ml/predict/risk",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "ml", "predict", "risk"]
+            }
+          }
+        },
+        {
+          "name": "ML Feature Clustering",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_id\": 1\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/ml/cluster/features",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "ml", "cluster", "features"]
+            }
+          }
+        },
+        {
+          "name": "Enhanced ML Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/ml/recommend/enhanced?project_id=1&limit=5",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "ml", "recommend", "enhanced"],
+              "query": [
+                {
+                  "key": "project_id",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Comprehensive Project Analysis",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/ml/analyze/project/1",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "ml", "analyze", "project", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Project Management",
+      "item": [
+        {
+          "name": "Get All Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/projects",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "projects"]
+            }
+          }
+        },
+        {
+          "name": "Create New Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"ML Testing Project\",\n  \"description\": \"Project for testing ML integration\",\n  \"functional_weight\": 0.3,\n  \"data_weight\": 0.2,\n  \"journey_weight\": 0.3,\n  \"risk_weight\": 0.15,\n  \"environmental_weight\": 0.05\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/projects",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "projects"]
+            }
+          }
+        },
+        {
+          "name": "Add Feature to Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feature_id\": \"ML-TEST-001\",\n  \"name\": \"ML Enhanced Feature\",\n  \"description\": \"Feature for testing ML predictions\",\n  \"priority\": \"high\",\n  \"complexity\": \"high\",\n  \"business_impact\": \"critical\",\n  \"risk_score\": 4,\n  \"status\": \"uncovered\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/projects/1/features",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "projects", "1", "features"]
+            }
+          }
+        },
+        {
+          "name": "Calculate Coverage",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/projects/1/coverage/calculate",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "projects", "1", "coverage", "calculate"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
