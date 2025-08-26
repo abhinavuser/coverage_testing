@@ -23,6 +23,23 @@ The repository is organized for both extensibility and clarity, with detailed wo
 ## Repository Structure
 
 > Note: This summary covers the most significant files/folders; to see the full list, visit the [GitHub contents page](https://github.com/abhinavuser/coverage_testing/tree/master).
+>
+> ```mermaid
+flowchart TD
+    A[User Input/API Request] --> B{Input Handler}
+    B -->|Manual| C[Input Parsing & Preprocessing]
+    B -->|API| D[Backend Server (FastAPI/Flask)]
+    C --> E[Core Workflow Orchestrator]
+    D --> E
+    E --> F[Code & Test Coverage Analyzer]
+    E --> G[Vulnerability Scanner]
+    E --> H[LLM Integration (HuggingFace/OpenAI)]
+    F --> I[Coverage Report Generator]
+    G --> I
+    H --> I
+    I --> J[Output Formatter]
+    J --> K[API/CLI Response or Report Files]
+```
 
 ### Root-level Files
 
