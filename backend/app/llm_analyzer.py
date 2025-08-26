@@ -10,19 +10,26 @@ from typing import Dict, List, Any, Optional
 import requests
 from datetime import datetime
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class LLMAnalyzer:
     """
     LLM-powered analyzer for coverage data and security insights
     """
     
-    def __init__(self, api_key: str = None, model_name: str = "microsoft/DialoGPT-medium"):
+    def __init__(self, api_key: str = None, model_name: str = "gpt2"):
+        # Use provided API key or get from environment variable
         self.api_key = api_key or os.getenv('HUGGINGFACE_API_KEY')
         self.model_name = model_name
         self.base_url = "https://api-inference.huggingface.co/models"
         
         if not self.api_key:
             logging.warning("No Hugging Face API key provided. LLM features will be disabled.")
+        else:
+            logging.info(f"LLM Analyzer initialized with API key: {self.api_key[:10]}...")
     
     def analyze_coverage_data(self, dataset_path: str, project_metadata: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -119,8 +126,8 @@ class LLMAnalyzer:
             'total_gaps': len(uncovered) + len(partial),
             'critical_gaps': len(uncovered[uncovered['business_impact'] == 'Critical']),
             'high_priority_gaps': len(uncovered[uncovered['priority'] == 'high']),
-            'gaps_by_module': uncovered.groupby('module').size().to_dict(),
-            'gaps_by_priority': uncovered.groupby('priority').size().to_dict(),
+            'gaps_by_module': uncovered.groupby('module').size().astype(int).to_dict(),
+            'gaps_by_priority': uncovered.groupby('priority').size().astype(int).to_dict(),
             'recommended_focus_areas': self._identify_focus_areas(uncovered)
         }
         
@@ -200,8 +207,8 @@ class LLMAnalyzer:
             'overall_risk_score': df['risk_score'].mean(),
             'high_risk_items': len(df[df['risk_score'] > 4.0]),
             'critical_impact_items': len(df[df['business_impact'] == 'Critical']),
-            'risk_by_module': df.groupby('module')['risk_score'].mean().to_dict(),
-            'risk_by_priority': df.groupby('priority')['risk_score'].mean().to_dict(),
+            'risk_by_module': df.groupby('module')['risk_score'].mean().astype(float).to_dict(),
+            'risk_by_priority': df.groupby('priority')['risk_score'].mean().astype(float).to_dict(),
             'uncovered_high_risk': len(df[(df['status'] == 'uncovered') & (df['risk_score'] > 3.0)])
         }
         
@@ -276,8 +283,8 @@ class LLMAnalyzer:
         """Analyze API endpoints and their test requirements"""
         endpoint_analysis = {
             'total_endpoints': len(df),
-            'endpoints_by_module': df.groupby('module').size().to_dict(),
-            'endpoints_by_priority': df.groupby('priority').size().to_dict(),
+            'endpoints_by_module': df.groupby('module').size().astype(int).to_dict(),
+            'endpoints_by_priority': df.groupby('priority').size().astype(int).to_dict(),
             'uncovered_endpoints': len(df[df['status'] == 'uncovered']),
             'high_risk_endpoints': len(df[df['risk_score'] > 4.0])
         }
@@ -485,8 +492,8 @@ class LLMAnalyzer:
         return {
             'total_rows': len(df),
             'columns': list(df.columns),
-            'missing_values': df.isnull().sum().to_dict(),
-            'data_types': df.dtypes.to_dict()
+            'missing_values': df.isnull().sum().astype(int).to_dict(),
+            'data_types': {col: str(dtype) for col, dtype in df.dtypes.to_dict().items()}
         }
     
     # Fallback methods when LLM is not available

@@ -11,6 +11,10 @@ from .utils import CoverageCalculator, GapAnalyzer, RecommendationGenerator
 from .ml_engine import MLRecommendationEngine
 from .coverage_generator import CoverageDatasetGenerator
 from .llm_analyzer import LLMAnalyzer
+from .ml_model_manager import MLModelManager
+
+# Initialize ML manager
+ml_manager = MLModelManager()
 
 api = Blueprint('api', __name__)
 
@@ -894,6 +898,187 @@ def get_comprehensive_ml_analysis():
             }
         
         return jsonify(response)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ========== LLM-POWERED COVERAGE ANALYSIS WORKFLOW ==========
+
+@api.route('/coverage/analyze', methods=['POST'])
+def analyze_coverage():
+    """
+    Complete workflow: Analyze coverage from GitHub repo, zip file, or Docker Compose
+    """
+    try:
+        data = request.json
+        input_type = data.get('input_type')  # 'github', 'zip', 'docker_compose'
+        input_source = data.get('input_source')
+        
+        if not input_type or not input_source:
+            return jsonify({'error': 'Missing input_type or input_source'}), 400
+        
+        # Initialize generators
+        coverage_generator = CoverageDatasetGenerator()
+        llm_analyzer = LLMAnalyzer()
+        
+        # Generate coverage dataset
+        result = coverage_generator.process_input(input_source, input_type)
+        
+        if not result['success']:
+            return jsonify({'error': result['error']}), 500
+        
+        # Perform LLM analysis
+        llm_result = llm_analyzer.analyze_coverage_data(
+            result['dataset_path'], 
+            result['metadata']
+        )
+        
+        if not llm_result['success']:
+            return jsonify({'error': llm_result['error']}), 500
+        
+        # Combine results
+        analysis_result = {
+            'success': True,
+            'dataset_generation': result,
+            'llm_analysis': llm_result,
+            'workflow_summary': {
+                'input_type': input_type,
+                'input_source': input_source,
+                'dataset_created': True,
+                'llm_analysis_completed': True,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+        }
+        
+        return jsonify(analysis_result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/coverage/github', methods=['POST'])
+def analyze_github_repo():
+    """
+    Analyze coverage from GitHub repository URL
+    """
+    try:
+        data = request.json
+        github_url = data.get('github_url')
+        
+        if not github_url:
+            return jsonify({'error': 'Missing github_url'}), 400
+        
+        return analyze_coverage_internal('github', github_url)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/coverage/upload', methods=['POST'])
+def analyze_zip_upload():
+    """
+    Analyze coverage from uploaded ZIP file
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not file.filename.endswith('.zip'):
+            return jsonify({'error': 'Only ZIP files are supported'}), 400
+        
+        # Save uploaded file temporarily
+        temp_path = tempfile.mktemp(suffix='.zip')
+        file.save(temp_path)
+        
+        try:
+            return analyze_coverage_internal('zip', temp_path)
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/coverage/docker-compose', methods=['POST'])
+def analyze_docker_compose():
+    """
+    Analyze coverage from Docker Compose content
+    """
+    try:
+        data = request.json
+        docker_compose_content = data.get('docker_compose_content')
+        
+        if not docker_compose_content:
+            return jsonify({'error': 'Missing docker_compose_content'}), 400
+        
+        return analyze_coverage_internal('docker_compose', docker_compose_content)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/llm/analyze', methods=['POST'])
+def llm_analysis_only():
+    """
+    Perform LLM analysis on existing dataset
+    """
+    try:
+        data = request.json
+        dataset_path = data.get('dataset_path')
+        project_metadata = data.get('project_metadata', {})
+        
+        if not dataset_path:
+            return jsonify({'error': 'Missing dataset_path'}), 400
+        
+        llm_analyzer = LLMAnalyzer()
+        result = llm_analyzer.analyze_coverage_data(dataset_path, project_metadata)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def analyze_coverage_internal(input_type: str, input_source: str):
+    """
+    Internal function to handle coverage analysis
+    """
+    try:
+        # Initialize generators
+        coverage_generator = CoverageDatasetGenerator()
+        llm_analyzer = LLMAnalyzer()
+        
+        # Generate coverage dataset
+        result = coverage_generator.process_input(input_source, input_type)
+        
+        if not result['success']:
+            return jsonify({'error': result['error']}), 500
+        
+        # Perform LLM analysis
+        llm_result = llm_analyzer.analyze_coverage_data(
+            result['dataset_path'], 
+            result['metadata']
+        )
+        
+        if not llm_result['success']:
+            return jsonify({'error': llm_result['error']}), 500
+        
+        # Combine results
+        analysis_result = {
+            'success': True,
+            'dataset_generation': result,
+            'llm_analysis': llm_result,
+            'workflow_summary': {
+                'input_type': input_type,
+                'input_source': input_source,
+                'dataset_created': True,
+                'llm_analysis_completed': True,
+                'timestamp': datetime.utcnow().isoformat()
+            }
+        }
+        
+        return jsonify(analysis_result)
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
