@@ -1,0 +1,16 @@
+You are a world-class security auditor and QA lead.
+
+Given the following application summary, do these tasks:
+1. Infer and describe the full workflow of the application.
+2. List all possible and likely security vulnerabilities (static, business logic, config, supply chain, etc).
+3. Generate an exhaustive set of test cases for every endpoint, workflow, and module—including:
+   - Functional tests
+   - Security tests (auth, injection, access control, etc)
+   - Edge cases
+   - Any areas where coverage is missing or weak
+
+Be exhaustive, practical, and reference specific endpoints/functions/classes by name.
+
+=== APPLICATION SUMMARY START ===
+(Paste contents of app_summary.txt here)
+=== APPLICATION SUMMARY END ===
